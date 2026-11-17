@@ -1,0 +1,898 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kandi2Artmap</title>
+<style>
+  :root {
+    --bg: #1e1f24; --panel: #2a2c33; --panel2: #33363e; --text: #e8e8ec; --muted: #9a9ca6;
+    --accent: #ff4fa3; --line: #44474f;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+    font: 14px/1.4 "Segoe UI", system-ui, sans-serif; }
+  #app { display: flex; height: 100%; }
+  aside { width: 320px; min-width: 320px; background: var(--panel); overflow-y: auto; padding: 14px 16px 24px;
+    border-right: 1px solid var(--line); }
+  main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  h1 { font-size: 18px; margin: 0 0 12px; letter-spacing: .3px; }
+  h1 span { color: var(--accent); }
+  h2 { font-size: 12px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin: 18px 0 8px; }
+  label { display: block; margin: 6px 0; }
+  .row { display: flex; align-items: center; gap: 8px; margin: 6px 0; }
+  .row > label { margin: 0; }
+  .grow { flex: 1; }
+  input[type=range] { width: 100%; accent-color: var(--accent); }
+  input[type=number] { width: 70px; background: var(--panel2); color: var(--text); border: 1px solid var(--line);
+    border-radius: 4px; padding: 3px 5px; }
+  input[type=checkbox] { accent-color: var(--accent); }
+  select { background: var(--panel2); color: var(--text); border: 1px solid var(--line); border-radius: 4px; padding: 3px 5px; }
+  button { background: var(--panel2); color: var(--text); border: 1px solid var(--line); border-radius: 6px;
+    padding: 6px 10px; cursor: pointer; font: inherit; }
+  button:hover { border-color: var(--accent); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+  button.active { outline: 2px solid var(--accent); }
+  button:disabled { opacity: .45; cursor: default; }
+  .info { background: var(--panel2); border-radius: 6px; padding: 8px 10px; font-size: 13px; }
+  .info b { color: var(--accent); }
+  .muted { color: var(--muted); font-size: 12px; }
+  #drop { border: 2px dashed var(--line); border-radius: 8px; padding: 14px; text-align: center; cursor: pointer; }
+  #drop:hover, #drop.over { border-color: var(--accent); }
+  .swatch { width: 28px; height: 28px; border-radius: 4px; border: 1px solid var(--line); padding: 0; }
+  #toolbar { display: flex; gap: 14px; align-items: center; padding: 8px 14px; background: var(--panel);
+    border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+  #toolbar label { display: flex; align-items: center; gap: 5px; margin: 0; }
+  #viewport { flex: 1; overflow: auto; position: relative; background:
+    repeating-conic-gradient(#26272c 0% 25%, #2c2d33 0% 50%) 50% / 20px 20px; }
+  #view { display: block; margin: 16px; cursor: crosshair; }
+  #empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    color: var(--muted); font-size: 16px; pointer-events: none; }
+  #maps { display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); }
+  .mapcard { background: var(--panel2); border-radius: 6px; padding: 5px; text-align: center; font-size: 12px; cursor: pointer; }
+  .mapcard:hover { outline: 1px solid var(--accent); }
+  .mapcard canvas { width: 100%; image-rendering: pixelated; display: block; border-radius: 3px; }
+  #hover { font-size: 12px; color: var(--muted); margin-left: auto; }
+  details summary { cursor: pointer; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 1px; margin-top: 18px; }
+</style>
+</head>
+<body>
+<div id="app">
+  <aside>
+    <h1>Kandi<span>2</span>Artmap</h1>
+
+    <div id="drop">
+      <b>Open image</b><br><span class="muted">click or drag &amp; drop a pattern image here</span>
+      <input type="file" id="file" accept="image/*" hidden>
+    </div>
+    <div class="muted" id="fileinfo" style="margin-top:6px"></div>
+
+    <h2>Grid scale</h2>
+    <div class="row">
+      <label class="grow">Beads across</label>
+      <input type="number" id="colsNum" min="1" max="512" value="32">
+    </div>
+    <input type="range" id="cols" min="4" max="256" value="32">
+    <div class="row">
+      <label class="grow"><input type="checkbox" id="autoRows" checked> Beads down (auto)</label>
+      <input type="number" id="rowsNum" min="1" max="512" value="32" disabled>
+    </div>
+    <div class="row">
+      <button id="autodetect" class="grow" disabled>Auto-detect grid</button>
+    </div>
+    <div class="muted" id="cellinfo"></div>
+
+    <h2>Maps</h2>
+    <div class="row">
+      <label class="grow">Map size (beads)</label>
+      <input type="number" id="mapSize" min="1" max="256" value="32">
+    </div>
+    <label><input type="checkbox" id="center" checked> Pad &amp; center image</label>
+    <div class="info" id="mapinfo">Open an image to begin.</div>
+
+    <h2>Background / padding color</h2>
+    <div class="row">
+      <input type="color" id="bgColor" class="swatch" value="#ffffff">
+      <button id="pick" class="grow" disabled>Pick from image</button>
+    </div>
+    <label><input type="checkbox" id="bgTransparent"> Transparent padding on export</label>
+
+    <h2>Crop</h2>
+    <label><input type="checkbox" id="cropOn"> Crop image edges</label>
+    <div id="cropBox" style="display:none">
+      <div class="muted">Drag the rectangle's edges or corners in the view to crop, or drag inside it to move it.
+        The grid keeps its bead size. Values are in image pixels:</div>
+      <div class="row">
+        <label class="grow">Left</label><input type="number" id="cropL" min="0" value="0">
+        <label class="grow" style="text-align:right">Right</label><input type="number" id="cropR" min="0" value="0">
+      </div>
+      <div class="row">
+        <label class="grow">Top</label><input type="number" id="cropT" min="0" value="0">
+        <label class="grow" style="text-align:right">Bottom</label><input type="number" id="cropB" min="0" value="0">
+      </div>
+      <div class="row">
+        <button id="cropEditBtn" class="grow">Edit crop rectangle</button>
+        <button id="cropReset">Reset</button>
+      </div>
+    </div>
+
+    <h2>Export</h2>
+    <div class="row">
+      <label class="grow">Output</label>
+      <select id="exMode">
+        <option value="beads1">Beads, 1 px each (32×32)</option>
+        <option value="beadsN">Beads, enlarged</option>
+        <option value="orig">Original image crop</option>
+      </select>
+    </div>
+    <div class="row" id="exScaleRow" style="display:none">
+      <label class="grow">Pixels per bead</label>
+      <input type="number" id="exScale" min="2" max="100" value="16">
+    </div>
+    <label id="exGridRow" style="display:none"><input type="checkbox" id="exGrid"> Draw bead grid lines</label>
+    <div class="muted">Click a map below to export just that one. The previews match the export exactly.
+      If the sub-grid is on it's drawn over the export (in the 1 px version its lines replace those bead pixels).</div>
+    <div id="maps" style="margin-top:8px"></div>
+    <div class="row" style="margin-top:10px">
+      <button id="exAll" class="primary grow" disabled>Export all maps</button>
+    </div>
+    <div class="muted">Saves one .zip with every map plus a full image of all maps together.</div>
+
+  </aside>
+
+  <main>
+    <div id="toolbar">
+      <button id="cropDone" class="primary" style="display:none">Done cropping</button>
+      <label>View
+        <select id="viewMode">
+          <option value="orig">Original image</option>
+          <option value="beads">Bead preview</option>
+        </select>
+      </label>
+      <label><input type="checkbox" id="showGrid" checked> Bead grid</label>
+      <label><input type="checkbox" id="showSub"> Sub-grid every
+        <input type="number" id="subSize" min="1" max="256" value="8" style="width:50px">
+        <input type="color" id="subColor" value="#00c2ff" class="swatch" style="width:24px;height:22px" title="Sub-grid color"></label>
+      <label><input type="checkbox" id="showMaps" checked> Map borders</label>
+      <label><input type="checkbox" id="showRulers" checked> Rulers</label>
+      <label>Zoom <input type="range" id="zoom" min="10" max="1500" value="100" style="width:120px"></label>
+      <button id="fit">Fit</button>
+      <span class="muted" title="Middle-click drag also pans">Wheel: zoom · Ctrl+wheel: ←→ · Ctrl+Shift+wheel: ↑↓</span>
+      <span id="hover"></span>
+    </div>
+    <div id="viewport">
+      <canvas id="view"></canvas>
+      <div id="empty">Open an image to see the grid</div>
+    </div>
+  </main>
+</div>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const S = {
+    img: null, name: 'image', data: null, W: 0, H: 0,
+    cols: 32, rows: 32, beads: null, picking: false, fitScale: 1,
+    cropEdit: false, fitImg: 1, pos: null, cellW: 0, cellH: 0,
+  };
+
+  // ---------- geometry ----------
+  function crop() {
+    if (!S.img || !$('cropOn').checked) return { x: 0, y: 0, w: S.W, h: S.H };
+    const v = id => Math.max(0, Math.round(+$(id).value || 0));
+    const l = Math.min(v('cropL'), S.W - 4), t = Math.min(v('cropT'), S.H - 4);
+    const r = Math.min(v('cropR'), S.W - l - 4), b = Math.min(v('cropB'), S.H - t - 4);
+    return { x: l, y: t, w: S.W - l - r, h: S.H - t - b };
+  }
+  function geo() {
+    const c = crop();
+    const ms = Math.max(1, +$('mapSize').value || 32);
+    const cols = S.cols, rows = S.rows;
+    const mapsX = Math.max(1, Math.ceil(cols / ms)), mapsY = Math.max(1, Math.ceil(rows / ms));
+    const TW = mapsX * ms, TH = mapsY * ms;
+    const maxL = TW - cols, maxT = TH - rows, clamp = (v, m) => Math.max(0, Math.min(m, v));
+    let padL = 0, padT = 0;
+    if ($('center').checked) { padL = Math.floor(maxL / 2); padT = Math.floor(maxT / 2); }
+    else if (S.pos) { padL = clamp(S.pos.x, maxL); padT = clamp(S.pos.y, maxT); }
+    return { c, ms, cols, rows, mapsX, mapsY, TW, TH, padL, padT, cw: c.w / cols, ch: c.h / rows };
+  }
+  const bg = () => $('bgColor').value;
+  const hex = ([r, g, b]) => '#' + [r, g, b].map(v => v.toString(16).padStart(2, '0')).join('');
+
+  // ---------- bead colour sampling ----------
+  // Takes the dominant colour of the inner part of each cell, so the bead hole / outline is ignored.
+  function sampleBeads() {
+    if (!S.img) return;
+    const g = geo(), d = S.data, W = S.W;
+    const out = new Array(g.cols * g.rows);
+    for (let r = 0; r < g.rows; r++) {
+      for (let q = 0; q < g.cols; q++) {
+        const x0 = g.c.x + q * g.cw, y0 = g.c.y + r * g.ch;
+        const ix0 = Math.floor(x0 + g.cw * 0.12), ix1 = Math.ceil(x0 + g.cw * 0.88);
+        const iy0 = Math.floor(y0 + g.ch * 0.12), iy1 = Math.ceil(y0 + g.ch * 0.88);
+        const step = Math.max(1, Math.floor((ix1 - ix0) / 16));
+        const counts = new Map(); let transparent = 0, total = 0;
+        for (let y = iy0; y < iy1; y += step) {
+          for (let x = ix0; x < ix1; x += step) {
+            if (x < 0 || y < 0 || x >= W || y >= S.H) continue;
+            const i = (y * W + x) * 4; total++;
+            if (d[i + 3] < 128) { transparent++; continue; }
+            const k = (d[i] >> 4) << 8 | (d[i + 1] >> 4) << 4 | (d[i + 2] >> 4);
+            let e = counts.get(k);
+            if (!e) counts.set(k, e = [0, 0, 0, 0]);
+            e[0]++; e[1] += d[i]; e[2] += d[i + 1]; e[3] += d[i + 2];
+          }
+        }
+        let best = null;
+        for (const e of counts.values()) if (!best || e[0] > best[0]) best = e;
+        out[r * g.cols + q] = (!best || transparent > total / 2) ? null
+          : [Math.round(best[1] / best[0]), Math.round(best[2] / best[0]), Math.round(best[3] / best[0])];
+      }
+    }
+    S.beads = out;
+  }
+
+  // ---------- auto-detect bead pitch ----------
+  function detectPeriod(axis) {
+    const c = crop(), d = S.data, W = S.W;
+    const len = axis === 'x' ? c.w : c.h, other = axis === 'x' ? c.h : c.w;
+    const prof = new Float64Array(len - 1);
+    const stepO = Math.max(1, Math.floor(other / 600));
+    const lum = i => d[i] * 0.3 + d[i + 1] * 0.59 + d[i + 2] * 0.11;
+    for (let o = 0; o < other; o += stepO) {
+      for (let p = 0; p < len - 1; p++) {
+        const x = axis === 'x' ? c.x + p : c.x + o, y = axis === 'x' ? c.y + o : c.y + p;
+        const i = (y * W + x) * 4, j = axis === 'x' ? i + 4 : i + W * 4;
+        prof[p] += Math.abs(lum(i) - lum(j));
+      }
+    }
+    let mean = 0; for (const v of prof) mean += v; mean /= prof.length;
+    for (let i = 0; i < prof.length; i++) prof[i] -= mean;
+    const maxLag = Math.min(400, Math.floor(prof.length / 3));
+    const score = new Float64Array(maxLag + 1);
+    for (let lag = 4; lag <= maxLag; lag++) {
+      let s = 0; const n = prof.length - lag;
+      for (let i = 0; i < n; i++) s += prof[i] * prof[i + lag];
+      score[lag] = s / n;
+    }
+    let best = 4;
+    for (let lag = 4; lag <= maxLag; lag++) if (score[lag] > score[best]) best = lag;
+    // prefer the fundamental if a sub-multiple scores almost as well
+    for (let k = 4; k >= 2; k--) {
+      const l = Math.round(best / k);
+      if (l >= 4) {
+        let m = score[l]; for (let dl = -1; dl <= 1; dl++) if (score[l + dl] > m) m = score[l + dl];
+        if (m > score[best] * 0.8) { best = l; break; }
+      }
+    }
+    // refine with sub-pixel estimate from total length
+    return Math.max(1, Math.round(len / best));
+  }
+  function autodetect() {
+    if (!S.img) return;
+    const cols = detectPeriod('x'), rows = detectPeriod('y');
+    setCols(cols, false);
+    const autoRowsFromCols = Math.round(crop().h / (crop().w / cols));
+    if (rows !== autoRowsFromCols) { $('autoRows').checked = false; $('rowsNum').disabled = false; }
+    setRows(rows);
+  }
+
+  // ---------- state setters ----------
+  function setCols(v, recalc = true) {
+    v = Math.max(1, Math.min(512, Math.round(v) || 1));
+    S.cols = v; $('colsNum').value = v; $('cols').value = Math.min(256, v);
+    if ($('autoRows').checked && S.img) {
+      const c = crop(); S.rows = Math.max(1, Math.round(c.h / (c.w / v))); $('rowsNum').value = S.rows;
+    }
+    if (recalc) update();
+  }
+  function setRows(v) {
+    S.rows = Math.max(1, Math.min(512, Math.round(v) || 1)); $('rowsNum').value = S.rows; update();
+  }
+
+  // ---------- main view ----------
+  const view = $('view'), vctx = view.getContext('2d');
+  function rulerSize() { return !S.cropEdit && $('showRulers').checked ? 30 : 0; }
+  function computeFit() {
+    const g = geo(), vp = $('viewport'), R = rulerSize();
+    S.fitScale = Math.max(0.5, Math.min((vp.clientWidth - 40 - R) / g.TW, (vp.clientHeight - 40 - R) / g.TH));
+    S.fitImg = Math.min((vp.clientWidth - 40) / S.W, (vp.clientHeight - 40) / S.H);
+  }
+  function scale() { return (S.cropEdit ? S.fitImg : S.fitScale) * (+$('zoom').value / 100); }
+
+  // ---------- crop editing view ----------
+  // Bead count that a crop would give while keeping the current bead size.
+  function colsFor(c) {
+    const cols = Math.max(1, Math.round(c.w / S.cellW));
+    const rows = $('autoRows').checked ? Math.max(1, Math.round(c.h / (c.w / cols))) : Math.max(1, Math.round(c.h / S.cellH));
+    return { cols, rows };
+  }
+  function cropRectView() {
+    const c = crop(), s = scale();
+    return { x0: c.x * s, y0: c.y * s, x1: (c.x + c.w) * s, y1: (c.y + c.h) * s, c, s };
+  }
+  function renderCrop() {
+    const s = scale(), dpr = window.devicePixelRatio || 1, w = S.W * s, h = S.H * s;
+    view.style.width = w + 'px'; view.style.height = h + 'px';
+    view.width = Math.ceil(w * dpr); view.height = Math.ceil(h * dpr);
+    const ctx = vctx; ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.imageSmoothingEnabled = true;
+    ctx.drawImage(S.img, 0, 0, w, h);
+    const { x0, y0, x1, y1, c } = cropRectView();
+    // darken what gets cut away
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    ctx.fillRect(0, 0, w, y0); ctx.fillRect(0, y1, w, h - y1);
+    ctx.fillRect(0, y0, x0, y1 - y0); ctx.fillRect(x1, y0, w - x1, y1 - y0);
+    // live bead grid inside the crop
+    const { cols, rows } = colsFor(c), gw = (x1 - x0) / cols, gh = (y1 - y0) / rows;
+    if (gw >= 3 && gh >= 3) {
+      ctx.beginPath(); ctx.strokeStyle = 'rgba(255,79,163,0.45)'; ctx.lineWidth = 1;
+      for (let q = 1; q < cols; q++) { ctx.moveTo(x0 + q * gw, y0); ctx.lineTo(x0 + q * gw, y1); }
+      for (let r = 1; r < rows; r++) { ctx.moveTo(x0, y0 + r * gh); ctx.lineTo(x1, y0 + r * gh); }
+      ctx.stroke();
+    }
+    ctx.strokeStyle = '#ff4fa3'; ctx.lineWidth = 2; ctx.strokeRect(x0, y0, x1 - x0, y1 - y0);
+    const hs = 10;
+    for (const [hx, hy] of [[x0, y0], [(x0 + x1) / 2, y0], [x1, y0], [x1, (y0 + y1) / 2],
+                            [x1, y1], [(x0 + x1) / 2, y1], [x0, y1], [x0, (y0 + y1) / 2]]) {
+      ctx.fillStyle = '#fff'; ctx.fillRect(hx - hs / 2, hy - hs / 2, hs, hs);
+      ctx.strokeStyle = '#ff4fa3'; ctx.lineWidth = 2; ctx.strokeRect(hx - hs / 2, hy - hs / 2, hs, hs);
+    }
+    const label = `${c.w} × ${c.h} px · ${cols} × ${rows} beads`;
+    ctx.font = 'bold 12px Segoe UI, sans-serif'; ctx.textBaseline = 'top';
+    const tw = ctx.measureText(label).width, ly = y0 > 24 ? y0 - 22 : y0 + 6;
+    ctx.fillStyle = 'rgba(255,79,163,0.95)'; ctx.fillRect(x0, ly, tw + 10, 18);
+    ctx.fillStyle = '#fff'; ctx.fillText(label, x0 + 5, ly + 3);
+  }
+  function cropHit(e) {
+    const rect = view.getBoundingClientRect(), mx = e.clientX - rect.left, my = e.clientY - rect.top;
+    const { x0, y0, x1, y1 } = cropRectView(), tol = 9;
+    const inX = mx > x0 - tol && mx < x1 + tol, inY = my > y0 - tol && my < y1 + tol;
+    if (!inX || !inY) return null;
+    let m = '';
+    if (Math.abs(mx - x0) <= tol) m += 'l'; else if (Math.abs(mx - x1) <= tol) m += 'r';
+    if (Math.abs(my - y0) <= tol) m += 't'; else if (Math.abs(my - y1) <= tol) m += 'b';
+    if (m) return m;
+    return mx > x0 && mx < x1 && my > y0 && my < y1 ? 'move' : null;
+  }
+  const CROP_CURSOR = { l: 'ew-resize', r: 'ew-resize', t: 'ns-resize', b: 'ns-resize', lt: 'nwse-resize',
+    rb: 'nwse-resize', rt: 'nesw-resize', lb: 'nesw-resize', move: 'move' };
+  function setCropValues(x0, y0, x1, y1) {
+    $('cropL').value = x0; $('cropT').value = y0; $('cropR').value = S.W - x1; $('cropB').value = S.H - y1;
+  }
+  // after any crop change: keep bead size, recompute bead counts
+  function applyCrop() {
+    if (!S.img) return;
+    const { cols, rows } = colsFor(crop());
+    if (!$('autoRows').checked) S.rows = rows;
+    setCols(cols, false);
+    if (!$('autoRows').checked) $('rowsNum').value = S.rows;
+    computeFit(); update();
+  }
+  function enterCropEdit() {
+    if (!S.img) return;
+    S.cropEdit = true; $('cropDone').style.display = '';
+    $('zoom').value = 100; computeFit(); render();
+  }
+  function exitCropEdit() {
+    S.cropEdit = false; $('cropDone').style.display = 'none';
+    $('zoom').value = 100; computeFit(); render();
+  }
+
+  function render() {
+    if (!S.img) return;
+    if (S.cropEdit) return renderCrop();
+    const g = geo(), s = scale(), R = rulerSize(), dpr = window.devicePixelRatio || 1;
+    const w = R + g.TW * s, h = R + g.TH * s;
+    view.style.width = w + 'px'; view.style.height = h + 'px';
+    view.width = Math.ceil(w * dpr); view.height = Math.ceil(h * dpr);
+    const ctx = vctx; ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+    ctx.save(); ctx.translate(R, R);
+
+    // padding / background
+    ctx.fillStyle = bg(); ctx.fillRect(0, 0, g.TW * s, g.TH * s);
+    const ix = g.padL * s, iy = g.padT * s;
+    if ($('viewMode').value === 'orig') {
+      ctx.imageSmoothingEnabled = s < g.cw;
+      ctx.drawImage(S.img, g.c.x, g.c.y, g.c.w, g.c.h, ix, iy, g.cols * s, g.rows * s);
+    } else {
+      for (let r = 0; r < g.rows; r++) for (let q = 0; q < g.cols; q++) {
+        const col = S.beads[r * g.cols + q];
+        ctx.fillStyle = col ? hex(col) : bg();
+        ctx.fillRect(ix + q * s, iy + r * s, Math.ceil(s), Math.ceil(s));
+      }
+    }
+    // dim the padded area slightly so it's visible
+    ctx.fillStyle = 'rgba(0,0,0,0.12)';
+    ctx.fillRect(0, 0, g.TW * s, iy);
+    ctx.fillRect(0, iy + g.rows * s, g.TW * s, g.TH * s - iy - g.rows * s);
+    ctx.fillRect(0, iy, ix, g.rows * s);
+    ctx.fillRect(ix + g.cols * s, iy, g.TW * s - ix - g.cols * s, g.rows * s);
+
+    // bead grid
+    if ($('showGrid').checked && s >= 3) {
+      ctx.beginPath(); ctx.strokeStyle = 'rgba(0,0,0,0.28)'; ctx.lineWidth = 1 / dpr;
+      for (let q = 0; q <= g.TW; q++) { const x = Math.round(q * s * dpr) / dpr + 0.5 / dpr; ctx.moveTo(x, 0); ctx.lineTo(x, g.TH * s); }
+      for (let r = 0; r <= g.TH; r++) { const y = Math.round(r * s * dpr) / dpr + 0.5 / dpr; ctx.moveTo(0, y); ctx.lineTo(g.TW * s, y); }
+      ctx.stroke();
+    }
+    // sub-grid (e.g. 8x8 blocks inside each map)
+    const sub = Math.max(1, +$('subSize').value || 8);
+    if ($('showSub').checked && sub < g.ms) {
+      ctx.beginPath(); ctx.strokeStyle = $('subColor').value; ctx.lineWidth = 1.5;
+      for (let q = 0; q <= g.TW; q++) if (q % g.ms % sub === 0 && q % g.ms) { ctx.moveTo(q * s, 0); ctx.lineTo(q * s, g.TH * s); }
+      for (let r = 0; r <= g.TH; r++) if (r % g.ms % sub === 0 && r % g.ms) { ctx.moveTo(0, r * s); ctx.lineTo(g.TW * s, r * s); }
+      ctx.stroke();
+    }
+    // image outline
+    ctx.setLineDash([6, 4]); ctx.strokeStyle = 'rgba(40,120,255,0.9)'; ctx.lineWidth = 1.5;
+    ctx.strokeRect(ix, iy, g.cols * s, g.rows * s); ctx.setLineDash([]);
+    // live preview while dragging the image's edges to crop
+    if (S.edgeDrag && !S.edgeDrag.scale) {
+      const d = S.edgeDrag.d;
+      const x0 = ix + d.l * s, y0 = iy + d.t * s, x1 = ix + (g.cols - d.r) * s, y1 = iy + (g.rows - d.b) * s;
+      ctx.fillStyle = 'rgba(0,0,0,0.5)';
+      const L = Math.min(ix, x0), T = Math.min(iy, y0), Rr = Math.max(ix + g.cols * s, x1), B = Math.max(iy + g.rows * s, y1);
+      ctx.fillRect(L, T, Rr - L, y0 - T); ctx.fillRect(L, y1, Rr - L, B - y1);
+      ctx.fillRect(L, y0, x0 - L, y1 - y0); ctx.fillRect(x1, y0, Rr - x1, y1 - y0);
+      ctx.strokeStyle = '#ff4fa3'; ctx.lineWidth = 2.5; ctx.strokeRect(x0, y0, x1 - x0, y1 - y0);
+      const label = `${g.cols - d.l - d.r} × ${g.rows - d.t - d.b} beads`;
+      ctx.font = 'bold 12px Segoe UI, sans-serif'; ctx.textBaseline = 'top';
+      const tw = ctx.measureText(label).width;
+      ctx.fillStyle = 'rgba(255,79,163,0.95)'; ctx.fillRect(x0, y0 + 4, tw + 10, 18);
+      ctx.fillStyle = '#fff'; ctx.fillText(label, x0 + 5, y0 + 7);
+    }
+    // map borders
+    if ($('showMaps').checked) {
+      ctx.strokeStyle = '#ff2d8f'; ctx.lineWidth = 3;
+      for (let mx = 0; mx <= g.mapsX; mx++) { ctx.beginPath(); ctx.moveTo(mx * g.ms * s, 0); ctx.lineTo(mx * g.ms * s, g.TH * s); ctx.stroke(); }
+      for (let my = 0; my <= g.mapsY; my++) { ctx.beginPath(); ctx.moveTo(0, my * g.ms * s); ctx.lineTo(g.TW * s, my * g.ms * s); ctx.stroke(); }
+      ctx.font = 'bold 13px Segoe UI, sans-serif'; ctx.textBaseline = 'top';
+      for (let my = 0; my < g.mapsY; my++) for (let mx = 0; mx < g.mapsX; mx++) {
+        const label = mapName(mx, my), x = mx * g.ms * s + 6, y = my * g.ms * s + 6;
+        const tw = ctx.measureText(label).width;
+        ctx.fillStyle = 'rgba(255,45,143,0.9)'; ctx.fillRect(x - 3, y - 2, tw + 6, 19);
+        ctx.fillStyle = '#fff'; ctx.fillText(label, x, y + 1);
+      }
+    }
+    ctx.restore();
+
+    // rulers
+    if (R) {
+      ctx.fillStyle = '#2a2c33'; ctx.fillRect(0, 0, w, R); ctx.fillRect(0, 0, R, h);
+      ctx.strokeStyle = '#8a8c96'; ctx.fillStyle = '#c9cad2'; ctx.lineWidth = 1;
+      ctx.font = '10px Segoe UI, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+      const labelEvery = s >= 14 ? 4 : s >= 7 ? 8 : 16;
+      const drawAxis = (n, horiz) => {
+        ctx.beginPath();
+        for (let i = 0; i <= n; i++) {
+          const local = i % g.ms, pos = R + i * s;
+          const len = local === 0 ? R : (local % labelEvery === 0 ? 12 : (s >= 4 ? 5 : 0));
+          if (!len) continue;
+          if (horiz) { ctx.moveTo(pos + .5, R); ctx.lineTo(pos + .5, R - len); }
+          else { ctx.moveTo(R, pos + .5); ctx.lineTo(R - len, pos + .5); }
+          if (i < n && local % labelEvery === 0) {
+            if (horiz) ctx.fillText(local === 0 ? '1' : String(local), pos + (local === 0 ? s / 2 + 4 : 0), 2);
+            else { ctx.save(); ctx.translate(2, pos + (local === 0 ? s / 2 + 4 : 0)); ctx.rotate(-Math.PI / 2); ctx.textBaseline = 'top'; ctx.fillText(local === 0 ? '1' : String(local), 0, 0); ctx.restore(); }
+          }
+        }
+        ctx.stroke();
+      };
+      drawAxis(g.TW, true); drawAxis(g.TH, false);
+      ctx.fillStyle = '#ff4fa3'; ctx.fillRect(0, 0, R, R);
+      ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = 'bold 10px Segoe UI';
+      ctx.fillText(g.ms, R / 2, R / 2);
+    }
+  }
+  function mapName(mx, my) { return String.fromCharCode(65 + (my % 26)) + (mx + 1); }
+
+  // ---------- map thumbnails + export ----------
+  function buildBeadCanvas(g, px, grid) {
+    const cv = document.createElement('canvas');
+    cv.width = g.TW * px; cv.height = g.TH * px;
+    const ctx = cv.getContext('2d');
+    const transparent = $('bgTransparent').checked;
+    if (!transparent) { ctx.fillStyle = bg(); ctx.fillRect(0, 0, cv.width, cv.height); }
+    for (let r = 0; r < g.rows; r++) for (let q = 0; q < g.cols; q++) {
+      const col = S.beads[r * g.cols + q];
+      if (!col) { if (transparent) continue; ctx.fillStyle = bg(); }
+      else ctx.fillStyle = hex(col);
+      ctx.fillRect((g.padL + q) * px, (g.padT + r) * px, px, px);
+    }
+    if (grid && px >= 3) {
+      ctx.strokeStyle = 'rgba(0,0,0,0.3)'; ctx.lineWidth = 1; ctx.beginPath();
+      for (let q = 0; q <= g.TW; q++) { ctx.moveTo(q * px + .5, 0); ctx.lineTo(q * px + .5, cv.height); }
+      for (let r = 0; r <= g.TH; r++) { ctx.moveTo(0, r * px + .5); ctx.lineTo(cv.width, r * px + .5); }
+      ctx.stroke();
+    }
+    drawSubGrid(ctx, g, px, px);
+    return { cv, unitX: px * g.ms, unitY: px * g.ms };
+  }
+  // Sub-grid lines drawn over the full export (only when the Sub-grid view option is on).
+  // Lines sit on block boundaries inside each map; map edges are skipped so each map keeps its full size.
+  function drawSubGrid(ctx, g, ux, uy) {
+    const sub = Math.max(1, +$('subSize').value || 8);
+    if (!$('showSub').checked || sub >= g.ms) return;
+    const lw = Math.max(1, Math.round(Math.min(ux, uy) / 8));
+    ctx.fillStyle = $('subColor').value;
+    for (let q = 1; q < g.TW; q++) if (q % g.ms && q % g.ms % sub === 0)
+      ctx.fillRect(Math.round(q * ux - lw / 2), 0, lw, ctx.canvas.height);
+    for (let r = 1; r < g.TH; r++) if (r % g.ms && r % g.ms % sub === 0)
+      ctx.fillRect(0, Math.round(r * uy - lw / 2), ctx.canvas.width, lw);
+  }
+  function buildOrigCanvas(g) {
+    const cv = document.createElement('canvas');
+    cv.width = Math.round(g.TW * g.cw); cv.height = Math.round(g.TH * g.ch);
+    const ctx = cv.getContext('2d');
+    if (!$('bgTransparent').checked) { ctx.fillStyle = bg(); ctx.fillRect(0, 0, cv.width, cv.height); }
+    ctx.drawImage(S.img, g.c.x, g.c.y, g.c.w, g.c.h, Math.round(g.padL * g.cw), Math.round(g.padT * g.ch), g.c.w, g.c.h);
+    drawSubGrid(ctx, g, g.cw, g.ch);
+    return { cv, unitX: g.ms * g.cw, unitY: g.ms * g.ch };
+  }
+  function buildExport() {
+    const g = geo(), mode = $('exMode').value;
+    if (mode === 'orig') return { g, ...buildOrigCanvas(g) };
+    const px = mode === 'beads1' ? 1 : Math.max(2, +$('exScale').value || 16);
+    return { g, ...buildBeadCanvas(g, px, mode === 'beadsN' && $('exGrid').checked) };
+  }
+  function cropMap(ex, mx, my) {
+    const x0 = Math.round(mx * ex.unitX), y0 = Math.round(my * ex.unitY);
+    const x1 = Math.round((mx + 1) * ex.unitX), y1 = Math.round((my + 1) * ex.unitY);
+    const cv = document.createElement('canvas'); cv.width = x1 - x0; cv.height = y1 - y0;
+    cv.getContext('2d').drawImage(ex.cv, x0, y0, cv.width, cv.height, 0, 0, cv.width, cv.height);
+    return cv;
+  }
+  const toPng = cv => new Promise(res => cv.toBlob(res, 'image/png'));
+  function saveBlob(blob, name) {
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+  }
+  async function download(cv, name) { saveBlob(await toPng(cv), name); }
+
+  // ---------- minimal zip writer (stored, no compression — PNGs are already compressed) ----------
+  const CRC_TABLE = (() => {
+    const t = new Uint32Array(256);
+    for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; }
+    return t;
+  })();
+  function crc32(bytes) {
+    let c = 0xFFFFFFFF;
+    for (let i = 0; i < bytes.length; i++) c = CRC_TABLE[(c ^ bytes[i]) & 0xFF] ^ (c >>> 8);
+    return (c ^ 0xFFFFFFFF) >>> 0;
+  }
+  function makeZip(files) { // files: [{ name, bytes: Uint8Array }]
+    const enc = new TextEncoder(), parts = [], central = [];
+    const d = new Date();
+    const time = (d.getHours() << 11) | (d.getMinutes() << 5) | (d.getSeconds() >> 1);
+    const date = ((d.getFullYear() - 1980) << 9) | ((d.getMonth() + 1) << 5) | d.getDate();
+    let offset = 0;
+    for (const f of files) {
+      const name = enc.encode(f.name), crc = crc32(f.bytes), size = f.bytes.length;
+      const lh = new DataView(new ArrayBuffer(30));
+      lh.setUint32(0, 0x04034b50, true); lh.setUint16(4, 20, true); lh.setUint16(6, 0x0800, true);
+      lh.setUint16(8, 0, true); lh.setUint16(10, time, true); lh.setUint16(12, date, true);
+      lh.setUint32(14, crc, true); lh.setUint32(18, size, true); lh.setUint32(22, size, true);
+      lh.setUint16(26, name.length, true); lh.setUint16(28, 0, true);
+      parts.push(lh, name, f.bytes);
+      const ch = new DataView(new ArrayBuffer(46));
+      ch.setUint32(0, 0x02014b50, true); ch.setUint16(4, 20, true); ch.setUint16(6, 20, true);
+      ch.setUint16(8, 0x0800, true); ch.setUint16(10, 0, true); ch.setUint16(12, time, true); ch.setUint16(14, date, true);
+      ch.setUint32(16, crc, true); ch.setUint32(20, size, true); ch.setUint32(24, size, true);
+      ch.setUint16(28, name.length, true); ch.setUint32(42, offset, true);
+      central.push(ch, name);
+      offset += 30 + name.length + size;
+    }
+    const cdSize = central.reduce((s, p) => s + p.byteLength, 0);
+    const end = new DataView(new ArrayBuffer(22));
+    end.setUint32(0, 0x06054b50, true); end.setUint16(8, files.length, true); end.setUint16(10, files.length, true);
+    end.setUint32(12, cdSize, true); end.setUint32(16, offset, true);
+    return new Blob([...parts, ...central, end], { type: 'application/zip' });
+  }
+  async function exportAll() {
+    const btn = $('exAll'), label = btn.textContent;
+    btn.disabled = true; btn.textContent = 'Zipping…';
+    try {
+      const ex = buildExport(), files = [];
+      const add = async (cv, name) => files.push({ name, bytes: new Uint8Array(await (await toPng(cv)).arrayBuffer()) });
+      for (let my = 0; my < ex.g.mapsY; my++) for (let mx = 0; mx < ex.g.mapsX; mx++)
+        await add(cropMap(ex, mx, my), `${S.name}_map_${mapName(mx, my)}.png`);
+      await add(ex.cv, `${S.name}_full_${ex.g.mapsX}x${ex.g.mapsY}maps.png`);
+      saveBlob(makeZip(files), `${S.name}_maps.zip`);
+    } finally { btn.disabled = false; btn.textContent = label; }
+  }
+  function renderThumbs() {
+    const box = $('maps'); box.innerHTML = '';
+    if (!S.img) return;
+    // previews are built exactly like the export, so what you see is what you get
+    const ex = buildExport(), g = ex.g;
+    for (let my = 0; my < g.mapsY; my++) for (let mx = 0; mx < g.mapsX; mx++) {
+      const card = document.createElement('div'); card.className = 'mapcard'; card.title = 'Export this map';
+      const cv = cropMap(ex, mx, my); card.appendChild(cv);
+      card.appendChild(document.createTextNode(mapName(mx, my)));
+      card.onclick = () => download(cv, `${S.name}_map_${mapName(mx, my)}.png`);
+      box.appendChild(card);
+    }
+  }
+
+  // ---------- update ----------
+  let thumbTimer = 0;
+  function update() {
+    if (!S.img) return;
+    sampleBeads();
+    const g = geo();
+    S.cellW = g.cw; S.cellH = g.ch;
+    $('cellinfo').textContent = `Each bead ≈ ${g.cw.toFixed(1)} × ${g.ch.toFixed(1)} px of the image (${g.c.w}×${g.c.h} px used).`;
+    $('mapinfo').innerHTML =
+      `Pattern: <b>${g.cols} × ${g.rows}</b> beads<br>` +
+      `Maps: <b>${g.mapsX} × ${g.mapsY}</b> = <b>${g.mapsX * g.mapsY}</b> map${g.mapsX * g.mapsY > 1 ? 's' : ''}<br>` +
+      `Canvas: ${g.TW} × ${g.TH} beads<br>` +
+      `Padding: ${g.padL} left, ${g.TW - g.cols - g.padL} right, ${g.padT} top, ${g.TH - g.rows - g.padT} bottom`;
+    render();
+    clearTimeout(thumbTimer); thumbTimer = setTimeout(renderThumbs, 120);
+  }
+
+  // ---------- loading ----------
+  function loadFile(f) {
+    if (!f || !f.type.startsWith('image/')) return;
+    const url = URL.createObjectURL(f);
+    const img = new Image();
+    img.onload = () => {
+      S.img = img; S.W = img.naturalWidth; S.H = img.naturalHeight;
+      S.name = f.name.replace(/\.[^.]+$/, '');
+      const cv = document.createElement('canvas'); cv.width = S.W; cv.height = S.H;
+      const cx = cv.getContext('2d', { willReadFrequently: true }); cx.drawImage(img, 0, 0);
+      S.data = cx.getImageData(0, 0, S.W, S.H).data;
+      ['cropL', 'cropT', 'cropR', 'cropB'].forEach(id => $(id).value = 0);
+      $('cropOn').checked = false; $('cropBox').style.display = 'none';
+      S.cropEdit = false; $('cropDone').style.display = 'none'; S.pos = null;
+      $('fileinfo').textContent = `${f.name} — ${S.W} × ${S.H} px`;
+      $('empty').style.display = 'none';
+      ['autodetect', 'pick', 'exAll'].forEach(id => $(id).disabled = false);
+      $('autoRows').checked = true; $('rowsNum').disabled = true;
+      $('zoom').value = 100;
+      autodetect();
+      computeFit(); update();
+    };
+    img.src = url;
+  }
+
+  // ---------- events ----------
+  $('drop').onclick = () => $('file').click();
+  $('file').onchange = e => loadFile(e.target.files[0]);
+  ['dragover', 'dragenter'].forEach(ev => document.addEventListener(ev, e => { e.preventDefault(); $('drop').classList.add('over'); }));
+  ['dragleave', 'drop'].forEach(ev => document.addEventListener(ev, e => { e.preventDefault(); $('drop').classList.remove('over'); }));
+  document.addEventListener('drop', e => loadFile(e.dataTransfer.files[0]));
+  document.addEventListener('paste', e => {
+    const it = [...(e.clipboardData?.items || [])].find(i => i.type.startsWith('image/'));
+    if (it) loadFile(it.getAsFile());
+  });
+
+  $('cols').oninput = e => setCols(+e.target.value);
+  $('colsNum').onchange = e => setCols(+e.target.value);
+  $('rowsNum').onchange = e => setRows(+e.target.value);
+  $('autoRows').onchange = e => { $('rowsNum').disabled = e.target.checked; setCols(S.cols); };
+  $('autodetect').onclick = () => { autodetect(); computeFit(); update(); };
+  $('mapSize').onchange = () => { computeFit(); update(); };
+  $('center').onchange = () => { if ($('center').checked) S.pos = null; update(); };
+  ['cropL', 'cropT', 'cropR', 'cropB'].forEach(id => $(id).onchange = applyCrop);
+  $('cropOn').onchange = e => {
+    $('cropBox').style.display = e.target.checked ? '' : 'none';
+    if (!S.img) return;
+    applyCrop();
+    if (e.target.checked) enterCropEdit(); else if (S.cropEdit) exitCropEdit();
+  };
+  $('cropEditBtn').onclick = enterCropEdit;
+  $('cropDone').onclick = exitCropEdit;
+  $('cropReset').onclick = () => { ['cropL', 'cropT', 'cropR', 'cropB'].forEach(id => $(id).value = 0); applyCrop(); };
+  $('bgColor').oninput = update;
+  const refreshThumbs = () => { clearTimeout(thumbTimer); thumbTimer = setTimeout(renderThumbs, 120); };
+  ['viewMode', 'showGrid', 'showMaps'].forEach(id => $(id).onchange = render);
+  ['showSub', 'subSize'].forEach(id => $(id).onchange = () => { render(); refreshThumbs(); });
+  $('subColor').oninput = () => { $('showSub').checked = true; render(); refreshThumbs(); };
+  ['bgTransparent', 'exScale', 'exGrid'].forEach(id => $(id).onchange = refreshThumbs);
+  $('showRulers').onchange = () => { computeFit(); render(); };
+  $('zoom').oninput = render;
+
+  // Mouse wheel: zoom toward cursor. Ctrl+wheel: pan left/right. Ctrl+Shift+wheel: pan up/down.
+  // Middle-button drag also pans.
+  const vp = $('viewport');
+  vp.addEventListener('wheel', e => {
+    if (!S.img) return;
+    e.preventDefault();
+    const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? vp.clientHeight : 1;
+    const d = (e.deltaY || e.deltaX) * unit;
+    if (e.ctrlKey) {
+      if (e.shiftKey) vp.scrollTop += d; else vp.scrollLeft += d;
+      return;
+    }
+    const z = $('zoom'), oldZ = +z.value;
+    const newZ = Math.max(+z.min, Math.min(+z.max, oldZ * Math.pow(1.0015, -d)));
+    if (newZ === oldZ) return;
+    const rect = vp.getBoundingClientRect(), R = rulerSize(), M = 16;
+    const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+    const cx = mx + vp.scrollLeft - M - R, cy = my + vp.scrollTop - M - R;
+    z.value = newZ; render();
+    const k = newZ / oldZ;
+    vp.scrollLeft = cx * k + M + R - mx;
+    vp.scrollTop = cy * k + M + R - my;
+  }, { passive: false });
+  let drag = null;
+  vp.addEventListener('mousedown', e => {
+    if (e.button !== 1) return;
+    e.preventDefault();
+    drag = { x: e.clientX, y: e.clientY, sl: vp.scrollLeft, st: vp.scrollTop };
+    vp.style.cursor = 'grabbing';
+  });
+  window.addEventListener('mousemove', e => {
+    if (!drag) return;
+    vp.scrollLeft = drag.sl - (e.clientX - drag.x);
+    vp.scrollTop = drag.st - (e.clientY - drag.y);
+  });
+  window.addEventListener('mouseup', () => { drag = null; vp.style.cursor = ''; });
+  $('fit').onclick = () => { $('zoom').value = 100; computeFit(); render(); };
+  window.addEventListener('resize', () => { if (S.img) { computeFit(); render(); } });
+  $('exMode').onchange = e => {
+    const n = e.target.value === 'beadsN';
+    $('exScaleRow').style.display = n ? '' : 'none'; $('exGridRow').style.display = n ? '' : 'none';
+    refreshThumbs();
+  };
+  $('exAll').onclick = exportAll;
+
+  $('pick').onclick = () => {
+    S.picking = !S.picking; $('pick').classList.toggle('active', S.picking);
+    $('pick').textContent = S.picking ? 'Click a bead in the image…' : 'Pick from image';
+  };
+  function beadAt(e) {
+    if (!S.img) return null;
+    const g = geo(), s = scale(), R = rulerSize(), rect = view.getBoundingClientRect();
+    const bx = Math.floor((e.clientX - rect.left - R) / s), by = Math.floor((e.clientY - rect.top - R) / s);
+    if (bx < 0 || by < 0 || bx >= g.TW || by >= g.TH) return null;
+    const q = bx - g.padL, r = by - g.padT;
+    const inside = q >= 0 && r >= 0 && q < g.cols && r < g.rows;
+    return { g, bx, by, q, r, inside, color: inside ? S.beads[r * g.cols + q] : null };
+  }
+  // Left-drag: in crop mode resize/move the crop rectangle; otherwise move the image on the padded canvas.
+  let cropDrag = null, moveDrag = null;
+  // Edges/corners of the image outline in the grid view (for crop-by-dragging without crop mode).
+  function imageEdgeHit(e) {
+    const g = geo(), s = scale(), R = rulerSize(), rect = view.getBoundingClientRect();
+    const mx = e.clientX - rect.left - R, my = e.clientY - rect.top - R;
+    const x0 = g.padL * s, y0 = g.padT * s, x1 = x0 + g.cols * s, y1 = y0 + g.rows * s;
+    const tol = Math.max(5, Math.min(9, s / 2));
+    if (mx < x0 - tol || mx > x1 + tol || my < y0 - tol || my > y1 + tol) return null;
+    let m = '';
+    if (Math.abs(mx - x0) <= tol) m += 'l'; else if (Math.abs(mx - x1) <= tol) m += 'r';
+    if (Math.abs(my - y0) <= tol) m += 't'; else if (Math.abs(my - y1) <= tol) m += 'b';
+    return m || null;
+  }
+  function finishEdgeDrag() {
+    const { g, c, d, scale: scaling } = S.edgeDrag;
+    S.edgeDrag = null;
+    if (scaling) { computeFit(); update(); return; }
+    if (!d.l && !d.t && !d.r && !d.b) { render(); return; }
+    const x0 = Math.round(c.x + d.l * g.cw), x1 = Math.round(c.x + c.w - d.r * g.cw);
+    const y0 = Math.round(c.y + d.t * g.ch), y1 = Math.round(c.y + c.h - d.b * g.ch);
+    setCropValues(x0, y0, x1, y1);
+    if (!$('center').checked) S.pos = { x: g.padL + d.l, y: g.padT + d.t }; // keep the remaining beads in place
+    S.rows = g.rows - d.t - d.b;
+    if (!$('cropOn').checked) { $('cropOn').checked = true; $('cropBox').style.display = ''; }
+    applyCrop();
+  }
+  view.addEventListener('mousedown', e => {
+    if (e.button !== 0 || !S.img || S.picking) return;
+    if (S.cropEdit) {
+      const mode = cropHit(e);
+      if (!mode) return;
+      e.preventDefault();
+      cropDrag = { mode, x: e.clientX, y: e.clientY, c: crop() };
+    } else {
+      const edge = imageEdgeHit(e);
+      if (edge) {
+        e.preventDefault();
+        // crop on → drag crops; crop off → drag rescales the grid (beads across/down)
+        S.edgeDrag = { mode: edge, x: e.clientX, y: e.clientY, g: geo(), c: crop(), d: { l: 0, t: 0, r: 0, b: 0 },
+                       scale: !$('cropOn').checked, cols0: S.cols, rows0: S.rows, last: '' };
+        return;
+      }
+      const b = beadAt(e);
+      if (!b || !b.inside) return;
+      e.preventDefault();
+      moveDrag = { x: e.clientX, y: e.clientY, l: b.g.padL, t: b.g.padT };
+      view.style.cursor = 'grabbing';
+    }
+  });
+  window.addEventListener('mousemove', e => {
+    if (cropDrag) {
+      const s = scale(), d = cropDrag, c = d.c;
+      const dx = Math.round((e.clientX - d.x) / s), dy = Math.round((e.clientY - d.y) / s);
+      let x0 = c.x, y0 = c.y, x1 = c.x + c.w, y1 = c.y + c.h;
+      if (d.mode === 'move') {
+        const mx = Math.max(-x0, Math.min(S.W - x1, dx)), my = Math.max(-y0, Math.min(S.H - y1, dy));
+        x0 += mx; x1 += mx; y0 += my; y1 += my;
+      } else {
+        if (d.mode.includes('l')) x0 = Math.max(0, Math.min(x1 - 4, x0 + dx));
+        if (d.mode.includes('r')) x1 = Math.min(S.W, Math.max(x0 + 4, x1 + dx));
+        if (d.mode.includes('t')) y0 = Math.max(0, Math.min(y1 - 4, y0 + dy));
+        if (d.mode.includes('b')) y1 = Math.min(S.H, Math.max(y0 + 4, y1 + dy));
+      }
+      setCropValues(x0, y0, x1, y1);
+      render();
+    } else if (S.edgeDrag) {
+      const s = scale(), E = S.edgeDrag, g = E.g, c = E.c;
+      const bx = Math.round((e.clientX - E.x) / s), by = Math.round((e.clientY - E.y) / s);
+      if (E.scale) {
+        const m = E.mode, lim = v => Math.max(1, Math.min(512, v));
+        const dc = m.includes('r') ? bx : m.includes('l') ? -bx : 0;
+        const dr = m.includes('b') ? by : m.includes('t') ? -by : 0;
+        let cols, rows;
+        if ($('autoRows').checked) {
+          // proportional: follow the horizontal edge if one is grabbed, else derive from the vertical one
+          cols = lim(m.includes('l') || m.includes('r') ? E.cols0 + dc : Math.round((E.rows0 + dr) * E.cols0 / E.rows0));
+        } else { cols = lim(E.cols0 + dc); rows = lim(E.rows0 + dr); }
+        const key = cols + 'x' + rows;
+        if (key !== E.last) {
+          E.last = key;
+          if (rows) { S.rows = rows; $('rowsNum').value = rows; }
+          setCols(cols); // updates grid, beads, info and thumbnails
+        }
+        return;
+      }
+      // trimming is positive; going negative grows back into previously cropped-off pixels
+      const room = { l: Math.floor(c.x / g.cw), r: Math.floor((S.W - c.x - c.w) / g.cw),
+                     t: Math.floor(c.y / g.ch), b: Math.floor((S.H - c.y - c.h) / g.ch) };
+      const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+      const d = E.d;
+      if (E.mode.includes('l')) d.l = clamp(bx, -room.l, g.cols - d.r - 1);
+      if (E.mode.includes('r')) d.r = clamp(-bx, -room.r, g.cols - d.l - 1);
+      if (E.mode.includes('t')) d.t = clamp(by, -room.t, g.rows - d.b - 1);
+      if (E.mode.includes('b')) d.b = clamp(-by, -room.b, g.rows - d.t - 1);
+      render();
+    } else if (moveDrag) {
+      const s = scale();
+      S.pos = { x: moveDrag.l + Math.round((e.clientX - moveDrag.x) / s), y: moveDrag.t + Math.round((e.clientY - moveDrag.y) / s) };
+      $('center').checked = false;
+      render();
+    }
+  });
+  window.addEventListener('mouseup', () => {
+    if (cropDrag) { cropDrag = null; applyCrop(); }
+    if (S.edgeDrag) finishEdgeDrag();
+    if (moveDrag) {
+      moveDrag = null; view.style.cursor = '';
+      const g = geo(); S.pos = { x: g.padL, y: g.padT };
+      update();
+    }
+  });
+
+  view.addEventListener('mousemove', e => {
+    if (S.cropEdit) {
+      if (!cropDrag) view.style.cursor = CROP_CURSOR[cropHit(e)] || 'default';
+      const rect = view.getBoundingClientRect(), s = scale();
+      $('hover').textContent = `${Math.floor((e.clientX - rect.left) / s)}, ${Math.floor((e.clientY - rect.top) / s)} px`;
+      return;
+    }
+    const b = beadAt(e);
+    if (!moveDrag && !S.edgeDrag) {
+      const edge = S.picking ? null : imageEdgeHit(e);
+      view.style.cursor = S.picking ? 'crosshair' : edge ? CROP_CURSOR[edge] : b && b.inside ? 'grab' : 'default';
+    }
+    if (!b) { $('hover').textContent = ''; return; }
+    const mx = Math.floor(b.bx / b.g.ms), my = Math.floor(b.by / b.g.ms);
+    $('hover').textContent = `Map ${mapName(mx, my)} · bead (${b.bx % b.g.ms + 1}, ${b.by % b.g.ms + 1})` +
+      (b.inside ? ` · ${b.color ? hex(b.color) : 'transparent'}` : ' · padding');
+  });
+  view.addEventListener('click', e => {
+    if (!S.picking || S.cropEdit) return;
+    const b = beadAt(e);
+    if (b && b.inside && b.color) {
+      $('bgColor').value = hex(b.color);
+      S.picking = false; $('pick').classList.remove('active'); $('pick').textContent = 'Pick from image';
+      update();
+    }
+  });
+})();
+</script>
+</body>
+</html>
